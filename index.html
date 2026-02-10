@@ -472,11 +472,6 @@
           const predPaths = [
             onnxPathFromCfg,
             './models/predict/onnx/predict.onnx',
-            './predict/ensemble_prob_calibrated.onnx',
-            './ensemble_prob_calibrated.onnx',
-            './models/predict/onnx/predict.onnx',
-            './models/predict/predict.onnx',
-            './predict.onnx',
           ].filter(Boolean).map(normalizePath);
 
           this.predSession = await this._createSessionFirst(predPaths);
