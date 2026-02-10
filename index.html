@@ -612,7 +612,7 @@
         }
         if (isRecording) statusText.innerText = `AI 감시 중`;
       } catch {
-        addLog("⚠️ 분석 실패", "warning");
+        addLog(`⚠️ 분석 실패: ${e?.message || e}`, "warning");
       } finally {
         statusBar.classList.remove('analyzing');
       }
