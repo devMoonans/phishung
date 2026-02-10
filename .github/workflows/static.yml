@@ -28,7 +28,19 @@ jobs:
         run: |
           git lfs pull
           git lfs checkout
+
+          echo "== LFS tracked files =="
+          git lfs ls-files || true
+
+          echo "== Check files in repo =="
           ls -lh models/embedding/onnx/embeddings.onnx
+          ls -lh models/predict/onnx/predict.onnx
+          ls -lh models/predict/onnx/ensemble_prob_calibrated.onnx || true
+
+      - name: Verify assets exist
+        run: |
+          test -f models/embedding/onnx/embeddings.onnx
+          test -f models/predict/onnx/predict.onnx
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
