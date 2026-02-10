@@ -1,0 +1,39 @@
+{
+  "input_dim": 384,
+  "model_paths": [
+    "./scores_ens\\ensemble_model1.pt",
+    "./scores_ens\\ensemble_model2.pt"
+  ],
+  "low_thr": 0.06799862533807755,
+  "high_thr": 0.9886300563812256,
+  "max_fpr_for_low": 0.01,
+  "prec_target_for_high": 0.99,
+  "ratios": {
+    "normal_call_hard.npy": 1.5,
+    "normal_dialog_hard.npy": 1.5,
+    "normal_call.npy": 1.0,
+    "normal_dialog.npy": 1.0,
+    "normal_kin.npy": 1.2
+  },
+  "total_normal_target": 3000,
+  "seeds": [
+    1,
+    2026
+  ],
+  "bootstrap_train": true,
+  "calibration": {
+    "method": "temperature_scaling",
+    "temperature": 0.8028818368911743,
+    "val_nll_before": 0.02908587083220482,
+    "val_nll_after": 0.02602033130824566,
+    "vector_dir_used_for_calibration": "./vector",
+    "phishing_files_seen": [
+      "phishing_dialog.npy",
+      "phishing_gemini.npy"
+    ],
+    "split_seed": 42
+  },
+  "low_thr_raw": 0.28636589646339417,
+  "high_thr_raw": 0.8462548851966858,
+  "onnx_calibrated_path": "./scores_ens\\onnx\\ensemble_prob_calibrated.onnx"
+}
