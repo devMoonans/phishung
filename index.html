@@ -1,433 +1,674 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>피싱 탐지 시뮬레이터 - On-Device AI</title>
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-    <style>
-        /* =========================================
-           디자인(CSS)은 원본과 100% 동일합니다.
-           ========================================= */
-        body { background-color: #121212; color: white; font-family: 'Apple SD Gothic Neo', sans-serif; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
-        #landing-page { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); z-index: 2000; overflow-y: auto; transition: opacity 0.5s ease; display: flex; flex-direction: column; align-items: center; }
-        .hero-section { min-height: 100vh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; }
-        .landing-icon { font-size: 5rem; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
-        .landing-title { font-size: 3rem; font-weight: bold; margin-bottom: 10px; background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .landing-subtitle { font-size: 1.2rem; color: #ccc; margin-bottom: 40px; max-width: 600px; line-height: 1.6; }
-        .start-btn { padding: 15px 40px; font-size: 1.2rem; font-weight: bold; color: white; background: linear-gradient(45deg, #4facfe, #00f2fe); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 10px 20px rgba(0, 242, 254, 0.3); transition: transform 0.2s, box-shadow 0.2s; margin-bottom: 20px; }
-        .start-btn:hover { transform: translateY(-3px); box-shadow: 0 15px 25px rgba(0, 242, 254, 0.5); }
-        .scroll-hint { position: absolute; bottom: 30px; color: rgba(255,255,255,0.5); animation: bounce 2s infinite; font-size: 0.9rem; cursor: pointer; }
-        .info-section { width: 100%; padding: 80px 20px; background: rgba(0,0,0,0.2); text-align: center; box-sizing: border-box; }
-        .info-container { max-width: 1000px; margin: 0 auto; }
-        .section-title { font-size: 2rem; margin-bottom: 50px; color: #fff; position: relative; display: inline-block; }
-        .section-title::after { content: ''; display: block; width: 60%; height: 3px; background: #4facfe; margin: 10px auto 0; border-radius: 2px; }
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 30px; text-align: left; }
-        .feature-card { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.3s ease; }
-        .feature-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.1); }
-        .feature-icon { font-size: 2.5rem; margin-bottom: 20px; display: block; }
-        .feature-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; color: #81d4fa; }
-        .feature-desc { font-size: 0.95rem; color: #ccc; line-height: 1.6; }
-        .footer { padding: 40px; text-align: center; font-size: 0.8rem; color: #666; background: rgba(0,0,0,0.3); width: 100%; box-sizing: border-box; }
-        #app-container { display: none; width: 100%; height: 100%; justify-content: center; align-items: center; animation: fadeIn 1s ease; }
-        .main-layout { display: flex; width: 95%; max-width: 1400px; height: 85vh; gap: 20px; transition: transform 0.3s ease; }
-        .side-panel { flex: 1; background: rgba(255, 255, 255, 0.05); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.1); }
-        h3 { margin-top: 0; color: #aaa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #444; padding-bottom: 10px;}
-        #analysis-log { flex: 1; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px; }
-        .log-item { padding: 8px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid #4a90e2; border-radius: 4px; animation: slideIn 0.3s ease; }
-        .log-warning { border-left-color: #f1c40f; background: rgba(241, 196, 15, 0.1); color: #f1c40f; }
-        .log-danger { border-left-color: #e74c3c; background: rgba(231, 76, 60, 0.1); color: #ffadad; font-weight: bold; }
-        .log-safe { border-color: #2ecc71; color: #abebc6; }
-        .log-send { border-left-color: #999; color: #bbb; background: rgba(255,255,255,0.05); }
-        #transcript-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-        .transcript-bubble { background: #2c3e50; padding: 12px; border-radius: 12px; font-size: 1rem; line-height: 1.4; animation: fadeIn 0.3s; position: relative; transition: all 0.2s; }
-        .transcript-bubble.playable { cursor: pointer; border: 1px solid transparent; transition: background 0.2s, border-color 0.2s; }
-        .transcript-bubble.playable:hover { background: #34495e; border-color: #4facfe; }
-        .transcript-bubble.playable.playing { background: #1f4068; border-color: #00f2fe; box-shadow: 0 0 10px rgba(0, 242, 254, 0.3); }
-        .transcript-bubble.playable:hover::after { content: '▶ 재생'; position: absolute; top: 5px; right: 8px; background: rgba(79, 172, 254, 0.9); color: white; font-size: 0.7rem; padding: 3px 8px; border-radius: 10px; pointer-events: none; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        .phone-frame { width: 360px; min-width: 360px; background: linear-gradient(180deg, #183340 0%, #0c1a20 100%); border-radius: 40px; border: 8px solid #000; box-shadow: 0 0 50px rgba(0,0,0,0.7); display: flex; flex-direction: column; position: relative; overflow: hidden; }
-        .status-bar { padding: 20px 25px; font-size: 0.9rem; display: flex; justify-content: center; color: rgba(255,255,255,0.9); font-weight: 500; z-index: 10; height: 30px; }
-        .status-bar.analyzing { color: #f1c40f; animation: blink 1s infinite; }
-        .caller-info { margin-top: 20px; text-align: center; z-index: 10; height: 100px; }
-        .caller-number { font-size: 2rem; font-weight: bold; margin-bottom: 5px; color: #fff; letter-spacing: 1px;}
-        .caller-sub-number { font-size: 1.1rem; color: rgba(255, 255, 255, 0.7); margin-bottom: 5px; letter-spacing: 1.5px; }
-        .caller-status { font-size: 0.9rem; color: #aabec6; transition: color 0.3s; }
-        .risk-gauge-wrapper { position: relative; width: 200px; height: 200px; margin: 10px auto 30px auto; display: flex; justify-content: center; align-items: center; z-index: 5; }
-        .gauge-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
-        .gauge-bg { fill: none; stroke: rgba(255, 255, 255, 0.1); stroke-width: 12; }
-        .gauge-progress { fill: none; stroke: #2ecc71; stroke-width: 12; stroke-linecap: round; stroke-dasharray: 565; stroke-dashoffset: 565; transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease; }
-        .gauge-text { position: absolute; text-align: center; }
-        .risk-label { font-size: 1rem; color: #2ecc71; font-weight: bold; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; transition: color 0.5s ease; }
-        .risk-percent { font-size: 3rem; font-weight: bold; color: white; transition: color 0.5s ease; }
-        .risk-gauge-wrapper.danger-active { animation: gauge-pulse 1s infinite; }
-        .bottom-section { margin-top: auto; padding-bottom: 30px; display: flex; flex-direction: column; align-items: center; }
-        .visualizer-area { height: 60px; display: flex; justify-content: center; align-items: center; opacity: 0.6; margin-bottom: 30px; }
-        .wave { width: 6px; height: 10px; background: #64b5f6; margin: 0 6px; border-radius: 10px; animation: wave 1s infinite ease-in-out; display: none; }
-        .wave:nth-child(2) { animation-delay: 0.1s; }
-        .wave:nth-child(3) { animation-delay: 0.2s; }
-        .wave:nth-child(4) { animation-delay: 0.3s; }
-        .wave:nth-child(5) { animation-delay: 0.4s; }
-        .action-btn-container { height: 80px; display: flex; justify-content: center; align-items: center; }
-        #main-btn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; align-items: center; justify-content: center; }
-        .phone-icon { width: 32px; height: 32px; fill: white; pointer-events: none; transition: transform 0.3s ease; }
-        #main-btn:hover { filter: brightness(1.1); transform: scale(1.05); }
-        #main-btn.start-mode { background: linear-gradient(135deg, #00e676, #00c853); animation: pulse-ring-green 2s infinite; }
-        #main-btn.start-mode .phone-icon { transform: rotate(0deg); }
-        #main-btn.recording-mode { background: linear-gradient(135deg, #ff5252, #ff1744); animation: pulse-ring 2s infinite; }
-        #main-btn.recording-mode .phone-icon { transform: rotate(135deg); }
-        #menu-btn, #back-btn { position: absolute; top: 20px; background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; color: white; cursor: pointer; z-index: 1000; padding: 8px; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; }
-        #menu-btn { right: 30px; }
-        #back-btn { left: 30px; }
-        #menu-btn:hover, #back-btn:hover { background-color: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.8); }
-        #history-sidebar { position: fixed; top: 0; right: -320px; width: 320px; height: 100vh; background-color: #1e1e1e; box-shadow: -5px 0 15px rgba(0,0,0,0.5); transition: right 0.3s ease-in-out; z-index: 999; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
-        #history-sidebar.open { right: 0; }
-        .sidebar-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #444; margin-top: 50px; }
-        #history-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
-        .history-item { background-color: #2c2c2c; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border-left: 4px solid #666; transition: background 0.2s; }
-        .history-item:hover { background-color: #3d3d3d; }
-        .history-item.danger { border-left-color: #e74c3c; }
-        .history-item.warning { border-left-color: #f1c40f; }
-        .history-item.safe { border-left-color: #2ecc71; }
-        .h-time { font-size: 0.8rem; color: #aaa; margin-bottom: 5px; display: block; }
-        .h-preview { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 900; display: none; opacity: 0; transition: opacity 0.3s; }
-        #overlay.show { display: block; opacity: 1; }
-        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
-        @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
-        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
-        @keyframes pulse-ring-green { 0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(0, 200, 83, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); } }
-        @keyframes wave { 0%, 100% { height: 10px; } 50% { height: 50px; } }
-        @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes gauge-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>피싱 탐지 시뮬레이터 - On-Device AI</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <style>
+    /* =========================================
+       디자인(CSS)은 원본과 100% 동일합니다.
+       (반응형 관련 CSS만 맨 아래에 "추가"됨)
+       ========================================= */
+    body { background-color: #121212; color: white; font-family: 'Apple SD Gothic Neo', sans-serif; margin: 0; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    #landing-page { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); z-index: 2000; overflow-y: auto; transition: opacity 0.5s ease; display: flex; flex-direction: column; align-items: center; }
+    .hero-section { min-height: 100vh; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; }
+    .landing-icon { font-size: 5rem; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
+    .landing-title { font-size: 3rem; font-weight: bold; margin-bottom: 10px; background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .landing-subtitle { font-size: 1.2rem; color: #ccc; margin-bottom: 40px; max-width: 600px; line-height: 1.6; }
+    .start-btn { padding: 15px 40px; font-size: 1.2rem; font-weight: bold; color: white; background: linear-gradient(45deg, #4facfe, #00f2fe); border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 10px 20px rgba(0, 242, 254, 0.3); transition: transform 0.2s, box-shadow 0.2s; margin-bottom: 20px; }
+    .start-btn:hover { transform: translateY(-3px); box-shadow: 0 15px 25px rgba(0, 242, 254, 0.5); }
+    .scroll-hint { position: absolute; bottom: 30px; color: rgba(255,255,255,0.5); animation: bounce 2s infinite; font-size: 0.9rem; cursor: pointer; }
+    .info-section { width: 100%; padding: 80px 20px; background: rgba(0,0,0,0.2); text-align: center; box-sizing: border-box; }
+    .info-container { max-width: 1000px; margin: 0 auto; }
+    .section-title { font-size: 2rem; margin-bottom: 50px; color: #fff; position: relative; display: inline-block; }
+    .section-title::after { content: ''; display: block; width: 60%; height: 3px; background: #4facfe; margin: 10px auto 0; border-radius: 2px; }
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 30px; text-align: left; }
+    .feature-card { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.3s ease; }
+    .feature-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.1); }
+    .feature-icon { font-size: 2.5rem; margin-bottom: 20px; display: block; }
+    .feature-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; color: #81d4fa; }
+    .feature-desc { font-size: 0.95rem; color: #ccc; line-height: 1.6; }
+    .footer { padding: 40px; text-align: center; font-size: 0.8rem; color: #666; background: rgba(0,0,0,0.3); width: 100%; box-sizing: border-box; }
+
+    #app-container { display: none; width: 100%; height: 100%; justify-content: center; align-items: center; animation: fadeIn 1s ease; }
+    .main-layout { display: flex; width: 95%; max-width: 1400px; height: 85vh; gap: 20px; transition: transform 0.3s ease; }
+
+    .side-panel { flex: 1; background: rgba(255, 255, 255, 0.05); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.1); }
+    h3 { margin-top: 0; color: #aaa; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #444; padding-bottom: 10px;}
+    #analysis-log { flex: 1; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; display: flex; flex-direction: column; gap: 8px; }
+    .log-item { padding: 8px; background: rgba(0, 0, 0, 0.3); border-left: 3px solid #4a90e2; border-radius: 4px; animation: slideIn 0.3s ease; }
+    .log-warning { border-left-color: #f1c40f; background: rgba(241, 196, 15, 0.1); color: #f1c40f; }
+    .log-danger { border-left-color: #e74c3c; background: rgba(231, 76, 60, 0.1); color: #ffadad; font-weight: bold; }
+    .log-safe { border-color: #2ecc71; color: #abebc6; }
+    .log-send { border-left-color: #999; color: #bbb; background: rgba(255,255,255,0.05); }
+
+    #transcript-box { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .transcript-bubble { background: #2c3e50; padding: 12px; border-radius: 12px; font-size: 1rem; line-height: 1.4; animation: fadeIn 0.3s; position: relative; transition: all 0.2s; }
+
+    .phone-frame { width: 360px; min-width: 360px; background: linear-gradient(180deg, #183340 0%, #0c1a20 100%); border-radius: 40px; border: 8px solid #000; box-shadow: 0 0 50px rgba(0,0,0,0.7); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    .status-bar { padding: 20px 25px; font-size: 0.9rem; display: flex; justify-content: center; color: rgba(255,255,255,0.9); font-weight: 500; z-index: 10; height: 30px; }
+    .status-bar.analyzing { color: #f1c40f; animation: blink 1s infinite; }
+    .caller-info { margin-top: 20px; text-align: center; z-index: 10; height: 100px; }
+    .caller-number { font-size: 2rem; font-weight: bold; margin-bottom: 5px; color: #fff; letter-spacing: 1px;}
+    .caller-sub-number { font-size: 1.1rem; color: rgba(255, 255, 255, 0.7); margin-bottom: 5px; letter-spacing: 1.5px; }
+    .caller-status { font-size: 0.9rem; color: #aabec6; transition: color 0.3s; }
+    .risk-gauge-wrapper { position: relative; width: 200px; height: 200px; margin: 10px auto 30px auto; display: flex; justify-content: center; align-items: center; z-index: 5; }
+    .gauge-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+    .gauge-bg { fill: none; stroke: rgba(255, 255, 255, 0.1); stroke-width: 12; }
+    .gauge-progress { fill: none; stroke: #2ecc71; stroke-width: 12; stroke-linecap: round; stroke-dasharray: 565; stroke-dashoffset: 565; transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease; }
+    .gauge-text { position: absolute; text-align: center; }
+    .risk-label { font-size: 1rem; color: #2ecc71; font-weight: bold; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px; transition: color 0.5s ease; }
+    .risk-percent { font-size: 3rem; font-weight: bold; color: white; transition: color 0.5s ease; }
+    .risk-gauge-wrapper.danger-active { animation: gauge-pulse 1s infinite; }
+    .bottom-section { margin-top: auto; padding-bottom: 30px; display: flex; flex-direction: column; align-items: center; }
+    .visualizer-area { height: 60px; display: flex; justify-content: center; align-items: center; opacity: 0.6; margin-bottom: 30px; }
+    .wave { width: 6px; height: 10px; background: #64b5f6; margin: 0 6px; border-radius: 10px; animation: wave 1s infinite ease-in-out; display: none; }
+    .wave:nth-child(2) { animation-delay: 0.1s; }
+    .wave:nth-child(3) { animation-delay: 0.2s; }
+    .wave:nth-child(4) { animation-delay: 0.3s; }
+    .wave:nth-child(5) { animation-delay: 0.4s; }
+    .action-btn-container { height: 80px; display: flex; justify-content: center; align-items: center; }
+    #main-btn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; align-items: center; justify-content: center; }
+    .phone-icon { width: 32px; height: 32px; fill: white; pointer-events: none; transition: transform 0.3s ease; }
+    #main-btn:hover { filter: brightness(1.1); transform: scale(1.05); }
+    #main-btn.start-mode { background: linear-gradient(135deg, #00e676, #00c853); animation: pulse-ring-green 2s infinite; }
+    #main-btn.start-mode .phone-icon { transform: rotate(0deg); }
+    #main-btn.recording-mode { background: linear-gradient(135deg, #ff5252, #ff1744); animation: pulse-ring 2s infinite; }
+    #main-btn.recording-mode .phone-icon { transform: rotate(135deg); }
+    #menu-btn, #back-btn { position: absolute; top: 20px; background-color: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; color: white; cursor: pointer; z-index: 1000; padding: 8px; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; }
+    #menu-btn { right: 30px; }
+    #back-btn { left: 30px; }
+    #menu-btn:hover, #back-btn:hover { background-color: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.8); }
+    #history-sidebar { position: fixed; top: 0; right: -320px; width: 320px; height: 100vh; background-color: #1e1e1e; box-shadow: -5px 0 15px rgba(0,0,0,0.5); transition: right 0.3s ease-in-out; z-index: 999; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
+    #history-sidebar.open { right: 0; }
+    .sidebar-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #444; margin-top: 50px; }
+    #history-list { flex: 1; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
+    .history-item { background-color: #2c2c2c; padding: 15px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border-left: 4px solid #666; transition: background 0.2s; }
+    .history-item:hover { background-color: #3d3d3d; }
+    .history-item.danger { border-left-color: #e74c3c; }
+    .history-item.warning { border-left-color: #f1c40f; }
+    .history-item.safe { border-left-color: #2ecc71; }
+    .h-time { font-size: 0.8rem; color: #aaa; margin-bottom: 5px; display: block; }
+    .h-preview { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+    #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 900; display: none; opacity: 0; transition: opacity 0.3s; }
+    #overlay.show { display: block; opacity: 1; }
+    @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
+    @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
+    @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(255, 59, 48, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); } }
+    @keyframes pulse-ring-green { 0% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(0, 200, 83, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0); } }
+    @keyframes wave { 0%, 100% { height: 10px; } 50% { height: 50px; } }
+    @keyframes slideIn { from { transform: translateX(-10px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes gauge-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+    /* =========================================
+       ✅ 반응형 추가 (잘림 방지 핵심)
+       - wrap + 작은 화면에서 세로 스택 + 스크롤 허용
+       ========================================= */
+    .main-layout { flex-wrap: wrap; justify-content: center; align-content: flex-start; }
+    .phone-frame { flex: 0 0 360px; }
+    .side-panel { flex: 1 1 320px; min-width: 320px; max-width: 520px; }
+
+    @media (max-width: 1250px) {
+      body { overflow: auto; align-items: flex-start; }
+      #app-container { align-items: flex-start; padding: 18px 0; height: auto; }
+      .main-layout { height: auto; width: 92%; }
+      .side-panel { max-height: 42vh; }
+    }
+    @media (max-width: 520px) {
+      .main-layout { width: 94%; }
+      .phone-frame { width: 100%; min-width: 0; flex: 1 1 auto; }
+      .side-panel { min-width: 0; max-width: 100%; max-height: none; }
+      #menu-btn { right: 16px; }
+      #back-btn { left: 16px; }
+    }
+  </style>
 </head>
 <body>
-    <div id="landing-page">
-        <div class="hero-section">
-            <div class="landing-icon">🛡️</div>
-            <div class="landing-title">On-Device 보이스피싱 탐지</div>
-            <p class="landing-subtitle">
-                서버 통신 없이, 브라우저에서 즉시 작동합니다.<br>
-                당신의 개인정보는 외부로 전송되지 않습니다.
-            </p>
-            <button class="start-btn" onclick="startApp()">시뮬레이션 시작하기</button>
-            <div class="scroll-hint" onclick="document.querySelector('.info-section').scrollIntoView({behavior: 'smooth'})">
-                ⌄ 아래로 스크롤하여 더 알아보기
-            </div>
+  <div id="landing-page">
+    <div class="hero-section">
+      <div class="landing-icon">🛡️</div>
+      <div class="landing-title">On-Device 보이스피싱 탐지</div>
+      <p class="landing-subtitle">
+        서버 통신 없이, 브라우저에서 즉시 작동합니다.<br>
+        당신의 개인정보는 외부로 전송되지 않습니다.
+      </p>
+      <button class="start-btn" onclick="startApp()">시뮬레이션 시작하기</button>
+      <div class="scroll-hint" onclick="document.querySelector('.info-section').scrollIntoView({behavior: 'smooth'})">
+        ⌄ 아래로 스크롤하여 더 알아보기
+      </div>
+    </div>
+    <div class="info-section">
+      <div class="info-container">
+        <h2 class="section-title">특징</h2>
+        <div class="features-grid">
+          <div class="feature-card">
+            <span class="feature-icon">🔒</span>
+            <h3 class="feature-title">완벽한 보안</h3>
+            <p class="feature-desc">음성 데이터가 서버로 전송되지 않고 기기 내에서 처리됩니다.</p>
+          </div>
+          <div class="feature-card">
+            <span class="feature-icon">⚡</span>
+            <h3 class="feature-title">빠른 응답 속도</h3>
+            <p class="feature-desc">네트워크 지연 없이 실시간으로 위험을 감지합니다.</p>
+          </div>
         </div>
-        <div class="info-section">
-            <div class="info-container">
-                <h2 class="section-title">특징</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <span class="feature-icon">🔒</span>
-                        <h3 class="feature-title">완벽한 보안</h3>
-                        <p class="feature-desc">음성 데이터가 서버로 전송되지 않고 기기 내에서 처리됩니다.</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">⚡</span>
-                        <h3 class="feature-title">빠른 응답 속도</h3>
-                        <p class="feature-desc">네트워크 지연 없이 실시간으로 위험을 감지합니다.</p>
-                    </div>
-                </div>
-            </div>
-            <div class="footer">© 2024 AI Phishing Detector Simulator. All rights reserved.</div>
-        </div>
+      </div>
+      <div class="footer">© 2024 AI Phishing Detector Simulator. All rights reserved.</div>
+    </div>
+  </div>
+
+  <div id="app-container">
+    <button id="back-btn" onclick="goBack()">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+      </svg>
+    </button>
+    <button id="menu-btn" onclick="toggleSidebar()">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="white">
+        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+      </svg>
+    </button>
+    <div id="overlay" onclick="toggleSidebar()"></div>
+
+    <div id="history-sidebar">
+      <div class="sidebar-header">📞 통화 기록 (로컬 저장)</div>
+      <ul id="history-list">
+        <li style="color:#666; font-size:0.9rem; text-align:center; padding:20px;">기록된 통화가 없습니다.</li>
+      </ul>
     </div>
 
-    <div id="app-container">
-        <button id="back-btn" onclick="goBack()"><svg width="30" height="30" viewBox="0 0 24 24" fill="white"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></button>
-        <button id="menu-btn" onclick="toggleSidebar()"><svg width="30" height="30" viewBox="0 0 24 24" fill="white"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></button>
-        <div id="overlay" onclick="toggleSidebar()"></div>
+    <div class="main-layout">
+      <!-- ✅ 로그는 유지 (thr/경로/디버그는 안 찍음) -->
+      <div class="side-panel">
+        <h3>🛡️ On-Device 분석 로그</h3>
+        <div id="analysis-log"><div class="log-item">시스템 대기 중...</div></div>
+      </div>
 
-        <div id="history-sidebar">
-            <div class="sidebar-header">📞 통화 기록 (로컬 저장)</div>
-            <ul id="history-list"><li style="color:#666; font-size:0.9rem; text-align:center; padding:20px;">기록된 통화가 없습니다.</li></ul>
+      <div class="phone-frame">
+        <div class="status-bar" id="status-bar"><span id="timer-display">HD Voice 00:00</span></div>
+        <div class="caller-info">
+          <div class="caller-number">피해자</div>
+          <div class="caller-sub-number">010-****-****</div>
+          <div class="caller-status" id="call-status-text">모델 로딩 중...</div>
         </div>
 
-        <div class="main-layout">
-            <div class="side-panel">
-                <h3>🛡️ On-Device 분석 로그</h3>
-                <div id="analysis-log"><div class="log-item">시스템 대기 중...</div></div>
-            </div>
-
-            <div class="phone-frame">
-                <div class="status-bar" id="status-bar"><span id="timer-display">HD Voice 00:00</span></div>
-                <div class="caller-info">
-                    <div class="caller-number">피해자</div>
-                    <div class="caller-sub-number">010-****-****</div>
-                    <div class="caller-status" id="call-status-text">연결 대기 중</div>
-                </div>
-
-                <div class="risk-gauge-wrapper" id="gauge-wrapper">
-                    <svg class="gauge-svg" viewBox="0 0 200 200">
-                        <circle class="gauge-bg" cx="100" cy="100" r="90"></circle>
-                        <circle class="gauge-progress" id="gauge-progress" cx="100" cy="100" r="90"></circle>
-                    </svg>
-                    <div class="gauge-text">
-                        <span class="risk-label" id="risk-label">안전</span>
-                        <span class="risk-percent" id="risk-percent">0%</span>
-                    </div>
-                </div>
-
-                <div class="bottom-section">
-                    <div class="visualizer-area" id="wave-box">
-                        <div class="wave"></div><div class="wave"></div><div class="wave"></div><div class="wave"></div><div class="wave"></div>
-                    </div>
-                    <div class="action-btn-container">
-                        <button id="main-btn" class="start-mode" onclick="toggleCall()">
-                            <svg class="phone-icon" viewBox="0 0 24 24">
-                                <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.51 1.51a15.09 15.09 0 01-6.59-6.59l1.51-1.51a.977.977 0 00.24-1.01C8.79 6.43 8.59 5.24 8.59 4.01 8.59 3.45 8.14 3 7.59 3H4.01C3.45 3 3 3.45 3 4.01c0 9.37 7.62 17 17 17 .56 0 1.01-.45 1.01-1.01v-3.58c0-.56-.45-1.01-1.01-1.01z"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="side-panel">
-                <h3>💬 실시간 대화 기록</h3>
-                <div id="transcript-box"></div>
-            </div>
+        <div class="risk-gauge-wrapper" id="gauge-wrapper">
+          <svg class="gauge-svg" viewBox="0 0 200 200">
+            <circle class="gauge-bg" cx="100" cy="100" r="90"></circle>
+            <circle class="gauge-progress" id="gauge-progress" cx="100" cy="100" r="90"></circle>
+          </svg>
+          <div class="gauge-text">
+            <span class="risk-label" id="risk-label">안전</span>
+            <span class="risk-percent" id="risk-percent">0%</span>
+          </div>
         </div>
+
+        <div class="bottom-section">
+          <div class="visualizer-area" id="wave-box">
+            <div class="wave"></div><div class="wave"></div><div class="wave"></div><div class="wave"></div><div class="wave"></div>
+          </div>
+          <div class="action-btn-container">
+            <button id="main-btn" class="start-mode" onclick="toggleCall()">
+              <svg class="phone-icon" viewBox="0 0 24 24">
+                <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.51 1.51a15.09 15.09 0 01-6.59-6.59l1.51-1.51a.977.977 0 00.24-1.01C8.79 6.43 8.59 5.24 8.59 4.01 8.59 3.45 8.14 3 7.59 3H4.01C3.45 3 3 3.45 3 4.01c0 9.37 7.62 17 17 17 .56 0 1.01-.45 1.01-1.01v-3.58c0-.56-.45-1.01-1.01-1.01z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <h3>💬 실시간 대화 기록</h3>
+        <div id="transcript-box"></div>
+      </div>
     </div>
+  </div>
 
-    <script type="module">
-        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+  <script type="module">
+    import { AutoTokenizer, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
-        // ==========================================
-        // 1. [설정] 경로 및 모델 설정
-        // ==========================================
-        env.allowLocalModels = true;
-        env.useBrowserCache = false;
+    const MIN_UTTER_LEN = 32;
+    const EWMA_ALPHA = 0.7;
 
-        // ★ 중요: 모델을 현재 폴더('./') 기준으로 찾도록 설정
-        env.localModelPath = './';
+    env.allowLocalModels = true;
+    env.allowRemoteModels = false;
+    env.useBrowserCache = false;
+    env.localModelPath = './';
 
-        // UI 요소
-        const mainBtn = document.getElementById('main-btn');
-        const statusText = document.getElementById('call-status-text');
-        const statusBar = document.getElementById('status-bar');
-        const transcriptBox = document.getElementById('transcript-box');
-        const analysisLog = document.getElementById('analysis-log');
-        const timerDisplay = document.getElementById('timer-display');
-        const sidebar = document.getElementById('history-sidebar');
-        const overlay = document.getElementById('overlay');
-        const historyList = document.getElementById('history-list');
-        const gaugeProgress = document.getElementById('gauge-progress');
-        const riskLabel = document.getElementById('risk-label');
-        const riskPercent = document.getElementById('risk-percent');
-        const gaugeWrapper = document.getElementById('gauge-wrapper');
-        const waveBox = document.getElementById('wave-box');
-        const waves = document.querySelectorAll('.wave');
-        const CIRCUMFERENCE = 565;
-        gaugeProgress.style.strokeDasharray = CIRCUMFERENCE;
+    const mainBtn = document.getElementById('main-btn');
+    const statusText = document.getElementById('call-status-text');
+    const statusBar = document.getElementById('status-bar');
+    const transcriptBox = document.getElementById('transcript-box');
+    const analysisLog = document.getElementById('analysis-log');
+    const timerDisplay = document.getElementById('timer-display');
+    const sidebar = document.getElementById('history-sidebar');
+    const overlay = document.getElementById('overlay');
+    const historyList = document.getElementById('history-list');
+    const gaugeProgress = document.getElementById('gauge-progress');
+    const riskLabel = document.getElementById('risk-label');
+    const riskPercent = document.getElementById('risk-percent');
+    const gaugeWrapper = document.getElementById('gauge-wrapper');
+    const waves = document.querySelectorAll('.wave');
 
-        // 변수
-        let recognition;
-        let isRecording = false;
-        let timerInterval;
-        let seconds = 0;
-        let historyData = [];
-        let currentSession = null;
-        let currentRiskScore = 0;
+    const CIRCUMFERENCE = 565;
+    gaugeProgress.style.strokeDasharray = CIRCUMFERENCE;
 
-        // ==========================================
-        // 2. 모델 클래스 정의
-        // ==========================================
-        class RealLocalModel {
-  constructor() {
-    this.isReady = false;
-    this.embedder = null;
-    this.classifier = null;
+    let recognition;
+    let isRecording = false;
+    let timerInterval;
+    let seconds = 0;
+    let historyData = [];
+    let currentSession = null;
+    let currentRiskScore = 0;
+    let utterBuffer = "";
 
-    // ✅ 누적 컨텍스트
-    this.contextVec = null;
-    this.turn = 0;
+    let LOW_THR = 0.2;
+    let HIGH_THR = 0.9;
 
-    this.init(); // <- init이 클래스 안에 있어야 함
-  }
-
-  async init() {
-    addLog("⏳ [1/2] 로컬 임베딩 모델 로딩 중...", "send");
-
-    try {
-      this.embedder = await pipeline('feature-extraction', 'web_embedding_model', {
-        local_files_only: true,
-        quantized: false
-      });
-      addLog("✅ 임베딩 모델 로드 성공!", "safe");
-
-      addLog("⏳ [2/2] 분류기 로드 중...", "send");
-      this.classifier = await ort.InferenceSession.create('./classifier.onnx');
-
-      this.isReady = true;
-      addLog("🚀 모든 AI 모델 준비 완료! 감시 대기 중.", "safe");
-
-      if (statusText) {
-        statusText.innerText = "AI 감시 준비됨";
-        statusText.style.color = "#2ecc71";
-      }
-
-    } catch (e) {
-      addLog("❌ 모델 로드 에러: " + e.message, "danger");
-      if (e.message.includes("404")) {
-        addLog("💡 힌트: 'python -m http.server' 명령어로 서버를 켰는지 확인하세요.", "warning");
-      }
-      console.error(e);
+    function addLog(text, type) {
+      if (!analysisLog) return;
+      const div = document.createElement('div');
+      let className = 'log-item';
+      if (type === 'danger') className += ' log-danger';
+      if (type === 'warning') className += ' log-warning';
+      if (type === 'safe') className += ' log-safe';
+      if (type === 'send') className += ' log-send';
+      div.className = className;
+      div.innerText = `[${new Date().toLocaleTimeString()}] ${text}`;
+      analysisLog.appendChild(div);
+      analysisLog.scrollTop = analysisLog.scrollHeight;
     }
-  }
 
-  resetContext() {
-    this.contextVec = null;
-    this.turn = 0;
-    addLog("🧹 대화 맥락 초기화됨", "safe");
-  }
+    function normalizePath(p) {
+      if (!p) return p;
+      return p.replaceAll('\\', '/');
+    }
 
-  async predict(text) {
-    if (!this.isReady) return null;
-
-    try {
-      const output = await this.embedder("query: " + text, { pooling: 'mean', normalize: true });
-      const currentVec = output.data;
-
-      const alpha = 0.7;     // 현재 0.7
-      const prevW = 0.3;     // 이전 0.3
-
-      if (this.contextVec === null) {
-        this.contextVec = Float32Array.from(currentVec);
-      } else {
-        const len = this.contextVec.length;
-        for (let j = 0; j < len; j++) {
-          this.contextVec[j] = alpha * currentVec[j] + prevW * this.contextVec[j];
-        }
+    async function fetchFirst(paths) {
+      for (const p of paths) {
+        try {
+          const res = await fetch(p, { cache: 'no-store' });
+          if (res.ok) return { path: p, json: await res.json() };
+        } catch {}
       }
-
-      // 정규화
-      let norm = 0;
-      for (let j = 0; j < this.contextVec.length; j++) norm += this.contextVec[j] * this.contextVec[j];
-      norm = Math.sqrt(norm) || 1.0;
-      for (let j = 0; j < this.contextVec.length; j++) this.contextVec[j] /= norm;
-
-      this.turn += 1;
-
-      const tensor = new ort.Tensor('float32', this.contextVec, [1, this.contextVec.length]);
-      const feeds = { input_embeddings: tensor };
-      const results = await this.classifier.run(feeds);
-
-      const outputKey = this.classifier.outputNames[0];
-      const prob = results[outputKey].data[0];
-
-      const score = Math.floor(prob * 100);
-      let level = 'safe';
-      if (score >= 95) level = 'danger';
-      else if (score >= 80) level = 'warning';
-
-      return { score, level, depth: this.turn };
-
-    } catch (e) {
-      console.error("추론 에러:", e);
-      addLog("⚠️ 추론 실패: " + e.message, "danger");
       return null;
     }
-  }
-}
 
+    function clamp01(x) {
+      if (!Number.isFinite(x)) return 0;
+      if (x < 0) return 0;
+      if (x > 1) return 1;
+      return x;
+    }
+    function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+    function probFromRaw(raw) {
+      if (raw >= 0 && raw <= 1) return raw;
+      return sigmoid(raw);
+    }
+    function labelByThreshold(prob) {
+      if (prob >= HIGH_THR) return 'danger';
+      if (prob >= LOW_THR) return 'warning';
+      return 'safe';
+    }
 
-        // ==========================================
-        // 3. 실행 로직 (기존과 동일)
-        // ==========================================
-        const localModel = new RealLocalModel();
+    function updateGaugeUI(score, level) {
+      score = Math.max(0, Math.min(100, score));
+      riskPercent.innerText = `${score}%`;
+      const offset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
+      gaugeProgress.style.strokeDashoffset = offset;
 
-        window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (window.SpeechRecognition) {
-            recognition = new window.SpeechRecognition();
-            recognition.lang = 'ko-KR';
-            recognition.continuous = true;
-            recognition.interimResults = false;
+      if (level === 'danger') {
+        riskLabel.innerText = "위험";
+        riskLabel.style.color = "#e74c3c";
+        gaugeProgress.style.stroke = "#e74c3c";
+        riskPercent.style.color = "#e74c3c";
+        gaugeWrapper.classList.add('danger-active');
+      } else if (level === 'warning') {
+        riskLabel.innerText = "주의";
+        riskLabel.style.color = "#f1c40f";
+        gaugeProgress.style.stroke = "#f1c40f";
+        riskPercent.style.color = "#f1c40f";
+        gaugeWrapper.classList.remove('danger-active');
+      } else {
+        riskLabel.innerText = "안전";
+        riskLabel.style.color = "#2ecc71";
+        gaugeProgress.style.stroke = "#2ecc71";
+        riskPercent.style.color = "#2ecc71";
+        gaugeWrapper.classList.remove('danger-active');
+      }
+    }
 
-            recognition.addEventListener('result', async (e) => {
-                const text = e.results[e.results.length - 1][0].transcript;
-                addTranscript(text);
-                await analyzeTextLocally(text);
-            });
-            recognition.addEventListener('end', () => { if(isRecording) recognition.start(); });
+    class RealLocalModel {
+      constructor() {
+        this.isReady = false;
+        this.tokenizer = null;
+        this.embedSession = null;
+        this.predSession = null;
+        this.embedInputs = null;
+        this.embedOutName = null;
+        this.predInName = null;
+        this.predOutName = null;
+        this.contextVec = null;
+        this.turn = 0;
+        this.init();
+      }
+
+      resetContext() {
+        this.contextVec = null;
+        this.turn = 0;
+      }
+
+      _l2normalize(vec) {
+        let s = 0;
+        for (let i = 0; i < vec.length; i++) s += vec[i] * vec[i];
+        const n = Math.sqrt(s) || 1.0;
+        for (let i = 0; i < vec.length; i++) vec[i] /= n;
+        return vec;
+      }
+
+      _meanPool(lastHidden, attnMask, seqLen, dim) {
+        const out = new Float32Array(dim);
+        let cnt = 0;
+        for (let t = 0; t < seqLen; t++) {
+          if (attnMask[t] === 0) continue;
+          const base = t * dim;
+          for (let d = 0; d < dim; d++) out[d] += lastHidden[base + d];
+          cnt++;
         }
+        const denom = cnt || 1;
+        for (let d = 0; d < dim; d++) out[d] /= denom;
+        return out;
+      }
 
-        async function analyzeTextLocally(text) {
-            const displayLog = text.length > 15 ? text.substring(0, 15) + "..." : text;
-            addLog(`🎤 인식: "${displayLog}"`, 'send');
-
-            if (!localModel.isReady) {
-                addLog("⚠️ 모델 로딩 중...", "warning");
-                return;
-            }
-
-            statusBar.classList.add('analyzing');
-            const result = await localModel.predict(text);
-
-            if (result) {
-                currentRiskScore = result.score;
-                updateGaugeUI(currentRiskScore);
-                if (result.level === 'danger') addLog(`🚨 위험 감지! (${result.score}%)`, 'danger');
-                else if (result.level === 'warning') addLog(`⚠️ 의심 패턴 (${result.score}%)`, 'warning');
-                else addLog(`✅ 정상 (${result.score}%)`, 'safe');
-
-                if (currentSession) {
-                    currentSession.finalRisk = currentRiskScore;
-                    if (result.level === 'danger') currentSession.isDanger = true;
-                }
-                if (isRecording) statusText.innerText = `감시 중 (누적 ${result.depth}턴)`;
-            }
-            statusBar.classList.remove('analyzing');
+      _toIntTensor(arr, shape, prefer='int64') {
+        if (prefer === 'int64') {
+          const big = new BigInt64Array(arr.length);
+          for (let i = 0; i < arr.length; i++) big[i] = BigInt(arr[i]);
+          return new ort.Tensor('int64', big, shape);
+        } else {
+          return new ort.Tensor('int32', new Int32Array(arr), shape);
         }
+      }
 
-        // UI Helpers
-        function startApp() { document.getElementById('landing-page').style.display = 'none'; document.getElementById('app-container').style.display = 'flex'; }
-        function goBack() { if (isRecording) toggleCall(); document.getElementById('app-container').style.display = 'none'; document.getElementById('landing-page').style.display = 'flex'; }
+      async _loadConfig() {
+        const cfgTry = await fetchFirst([
+          './models/predict/ensemble_config.json',
+          './scores_ens/ensemble_config.json',
+          './ensemble_config.json',
+        ]);
+        if (!cfgTry) throw new Error("cfg fail");
 
-        function updateGaugeUI(score) {
-            score = Math.max(0, Math.min(100, score));
-            riskPercent.innerText = `${score}%`;
-            const offset = CIRCUMFERENCE - (score / 100) * CIRCUMFERENCE;
-            gaugeProgress.style.strokeDashoffset = offset;
-            if (score < 60) { riskLabel.innerText = "안전"; riskLabel.style.color = "#2ecc71"; gaugeProgress.style.stroke = "#2ecc71"; riskPercent.style.color = "#2ecc71"; gaugeWrapper.classList.remove('danger-active'); }
-            else if (score < 90) { riskLabel.innerText = "주의"; riskLabel.style.color = "#f1c40f"; gaugeProgress.style.stroke = "#f1c40f"; riskPercent.style.color = "#f1c40f"; gaugeWrapper.classList.remove('danger-active'); }
-            else { riskLabel.innerText = "위험"; riskLabel.style.color = "#e74c3c"; gaugeProgress.style.stroke = "#e74c3c"; riskPercent.style.color = "#e74c3c"; gaugeWrapper.classList.add('danger-active'); }
+        const cfg = cfgTry.json;
+        LOW_THR = Number(cfg.low_thr);
+        HIGH_THR = Number(cfg.high_thr);
+
+        const onnxPathFromCfg = normalizePath(cfg.onnx_calibrated_path);
+        return { onnxPathFromCfg };
+      }
+
+      async _createSessionFirst(paths) {
+        let lastErr = null;
+        for (const p of paths) {
+          try {
+            return await ort.InferenceSession.create(p);
+          } catch (e) { lastErr = e; }
         }
+        throw lastErr ?? new Error("onnx fail");
+      }
 
-        async function toggleCall() {
-            if (!recognition) return;
-            if (!isRecording) {
-                if (!localModel.isReady) { alert("모델 로딩 중..."); return; }
-                transcriptBox.innerHTML = ''; analysisLog.innerHTML = '';
-                addLog("🔵 통화 연결됨", "safe");
-                localModel.resetContext(); currentRiskScore = 0; updateGaugeUI(0);
-                currentSession = { id: Date.now(), startTime: new Date().toLocaleString(), duration: 0, logs: [], transcripts: [], isDanger: false, finalRisk: 0 };
-                recognition.start(); isRecording = true; mainBtn.className = 'recording-mode';
-                statusText.innerText = "AI 감시 중"; statusText.style.color = "#64b5f6";
-                startWaveAnimation(); startTimer();
-            } else {
-                recognition.stop(); isRecording = false; mainBtn.className = 'start-mode';
-                addLog("⏹️ 통화 종료", "normal");
-                if (currentSession) { currentSession.duration = seconds; currentSession.finalRisk = currentRiskScore; historyData.push(currentSession); renderHistoryList(); }
-                stopWaveAnimation(); stopTimer();
-            }
+      async init() {
+        addLog("⏳ 모델 로딩 중...", "send");
+        try {
+          const { onnxPathFromCfg } = await this._loadConfig();
+
+          this.tokenizer = await AutoTokenizer.from_pretrained('models/embedding', { local_files_only: true });
+
+          const embedPaths = [
+            './models/embedding/onnx/embeddings.onnx',
+            './models/embedding/embeddings.onnx',
+            './embeddings.onnx',
+          ];
+          this.embedSession = await this._createSessionFirst(embedPaths);
+          this.embedInputs = this.embedSession.inputNames;
+          this.embedOutName = this.embedSession.outputNames[0];
+
+          const predPaths = [
+            onnxPathFromCfg,
+            './models/predict/onnx/ensemble_prob_calibrated.onnx',
+            './predict/ensemble_prob_calibrated.onnx',
+            './ensemble_prob_calibrated.onnx',
+            './models/predict/onnx/predict.onnx',
+            './models/predict/predict.onnx',
+            './predict.onnx',
+          ].filter(Boolean).map(normalizePath);
+
+          this.predSession = await this._createSessionFirst(predPaths);
+          this.predInName = this.predSession.inputNames[0];
+          this.predOutName = this.predSession.outputNames[0];
+
+          this.isReady = true;
+
+          addLog("✅ AI 감시 준비 완료", "safe");
+          statusText.innerText = "AI 감시 준비됨";
+          statusText.style.color = "#2ecc71";
+        } catch {
+          addLog("❌ 모델 로드 실패", "danger");
+          statusText.innerText = "모델 로드 실패";
+          statusText.style.color = "#e74c3c";
         }
+      }
 
-        function startTimer() { seconds = 0; timerDisplay.innerText = "00:00"; timerInterval = setInterval(() => { seconds++; timerDisplay.innerText = formatTime(seconds); }, 1000); }
-        function stopTimer() { clearInterval(timerInterval); timerDisplay.innerText = "HD Voice 00:00"; }
-        function formatTime(sec) { const m = Math.floor(sec / 60); const s = sec % 60; return `${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`; }
-        function startWaveAnimation() { waves.forEach(w => w.style.display = "block"); }
-        function stopWaveAnimation() { waves.forEach(w => w.style.display = "none"); }
-        function addTranscript(text) { const div = document.createElement('div'); div.className = 'transcript-bubble'; div.innerText = text; transcriptBox.appendChild(div); transcriptBox.scrollTop = transcriptBox.scrollHeight; }
-        function addLog(text, type) { if(!analysisLog) return; const div = document.createElement('div'); let className = 'log-item'; if(type === 'danger') className += ' log-danger'; if(type === 'warning') className += ' log-warning'; if(type === 'safe') className += ' log-safe'; if(type === 'send') className += ' log-send'; div.className = className; div.innerText = `[${new Date().toLocaleTimeString()}] ${text}`; analysisLog.appendChild(div); analysisLog.scrollTop = analysisLog.scrollHeight; }
-        function toggleSidebar() { sidebar.classList.toggle('open'); overlay.classList.toggle('show'); }
-        function renderHistoryList() { historyList.innerHTML = ''; [...historyData].reverse().forEach(session => { const li = document.createElement('li'); li.className = `history-item ${session.finalRisk >= 95 ? 'danger' : (session.finalRisk >= 80 ? 'warning' : 'safe')}`; li.innerHTML = `<span class="h-time">${session.startTime}</span><span class="h-preview">최종: ${session.finalRisk}%</span>`; historyList.appendChild(li); }); }
+      async _embed(text) {
+        const prefixed = "query: " + text;
+        const tok = await this.tokenizer(prefixed, { padding: true, truncation: true, max_length: 128 });
 
-        window.startApp = startApp; window.goBack = goBack; window.toggleCall = toggleCall; window.toggleSidebar = toggleSidebar;
-    </script>
+        const input_ids = tok.input_ids;
+        const attention_mask = tok.attention_mask;
+        const seqLen = input_ids.length;
+
+        const feedsTry = (dtype) => {
+          const feeds = {};
+          const shape = [1, seqLen];
+          if (this.embedInputs.includes('input_ids')) feeds['input_ids'] = this._toIntTensor(input_ids, shape, dtype);
+          if (this.embedInputs.includes('attention_mask')) feeds['attention_mask'] = this._toIntTensor(attention_mask, shape, dtype);
+          if (this.embedInputs.includes('token_type_ids')) feeds['token_type_ids'] = this._toIntTensor(new Array(seqLen).fill(0), shape, dtype);
+          return feeds;
+        };
+
+        let results;
+        try { results = await this.embedSession.run(feedsTry('int64')); }
+        catch { results = await this.embedSession.run(feedsTry('int32')); }
+
+        const out = results[this.embedOutName];
+        const dims = out.dims;
+
+        if (dims.length === 2) return this._l2normalize(Float32Array.from(out.data));
+        if (dims.length === 3) {
+          const dim = dims[2];
+          const pooled = this._meanPool(out.data, attention_mask, seqLen, dim);
+          return this._l2normalize(pooled);
+        }
+        throw new Error("embed dims");
+      }
+
+      async predict(text) {
+        const cur = await this._embed(text);
+
+        if (this.contextVec === null) {
+          this.contextVec = Float32Array.from(cur);
+        } else {
+          for (let i = 0; i < this.contextVec.length; i++) {
+            this.contextVec[i] = EWMA_ALPHA * cur[i] + (1 - EWMA_ALPHA) * this.contextVec[i];
+          }
+          this._l2normalize(this.contextVec);
+        }
+        this.turn += 1;
+
+        const x = new ort.Tensor('float32', this.contextVec, [1, this.contextVec.length]);
+        const res = await this.predSession.run({ [this.predInName]: x });
+
+        const raw = res[this.predOutName].data[0];
+        const prob = clamp01(probFromRaw(raw));
+        const level = labelByThreshold(prob);
+        const score = Math.round(prob * 100);
+
+        return { prob, score, level, depth: this.turn };
+      }
+    }
+
+    const localModel = new RealLocalModel();
+
+    // SpeechRecognition
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (window.SpeechRecognition) {
+      recognition = new window.SpeechRecognition();
+      recognition.lang = 'ko-KR';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.addEventListener('result', async (e) => {
+        const chunk = e.results[e.results.length - 1][0].transcript?.trim();
+        if (!chunk || !isRecording) return;
+
+        // ✅ 32자 누적 -> 1발화
+        utterBuffer = utterBuffer ? (utterBuffer + " " + chunk) : chunk;
+        if (utterBuffer.length < MIN_UTTER_LEN) return;
+
+        const utter = utterBuffer;
+        utterBuffer = "";
+
+        addTranscript(utter);
+        await analyzeTextLocally(utter);
+      });
+
+      // ✅ 마이크 경고/디버그 UI 표시 X (조용히 재시작만)
+      recognition.addEventListener('error', () => {
+        if (isRecording) {
+          try { recognition.stop(); } catch {}
+          setTimeout(() => { if (isRecording) { try { recognition.start(); } catch {} } }, 600);
+        }
+      });
+
+      recognition.addEventListener('end', () => {
+        if (isRecording) setTimeout(() => { try { recognition.start(); } catch {} }, 300);
+      });
+    } else {
+      addLog("⚠️ 이 브라우저는 음성 인식을 지원하지 않습니다.", "warning");
+    }
+
+    async function analyzeTextLocally(text) {
+      addLog("🎤 발화 분석 중...", "send");
+      if (!localModel.isReady) { addLog("⏳ 모델 준비 중...", "warning"); return; }
+
+      statusBar.classList.add('analyzing');
+      try {
+        const result = await localModel.predict(text);
+        if (!result) return;
+
+        currentRiskScore = result.score;
+        updateGaugeUI(currentRiskScore, result.level);
+
+        const ptxt = (result.prob * 100).toFixed(1);
+        if (result.level === 'danger') addLog(`🚨 위험 감지 (${ptxt}%)`, 'danger');
+        else if (result.level === 'warning') addLog(`⚠️ 의심 패턴 (${ptxt}%)`, 'warning');
+        else addLog(`✅ 정상 (${ptxt}%)`, 'safe');
+
+        if (currentSession) {
+          currentSession.finalRisk = currentRiskScore;
+          if (result.level === 'danger') currentSession.isDanger = true;
+        }
+        if (isRecording) statusText.innerText = `AI 감시 중`;
+      } catch {
+        addLog("⚠️ 분석 실패", "warning");
+      } finally {
+        statusBar.classList.remove('analyzing');
+      }
+    }
+
+    // UI Helpers
+    function startApp() { document.getElementById('landing-page').style.display = 'none'; document.getElementById('app-container').style.display = 'flex'; }
+    function goBack() { if (isRecording) toggleCall(); document.getElementById('app-container').style.display = 'none'; document.getElementById('landing-page').style.display = 'flex'; }
+
+    function startTimer() { seconds = 0; timerDisplay.innerText = "00:00"; timerInterval = setInterval(() => { seconds++; timerDisplay.innerText = formatTime(seconds); }, 1000); }
+    function stopTimer() { clearInterval(timerInterval); timerDisplay.innerText = "HD Voice 00:00"; }
+    function formatTime(sec) { const m = Math.floor(sec / 60); const s = sec % 60; return `${m < 10 ? '0'+m : m}:${s < 10 ? '0'+s : s}`; }
+    function startWaveAnimation() { waves.forEach(w => w.style.display = "block"); }
+    function stopWaveAnimation() { waves.forEach(w => w.style.display = "none"); }
+
+    function addTranscript(text) {
+      const div = document.createElement('div');
+      div.className = 'transcript-bubble';
+      div.innerText = text;
+      transcriptBox.appendChild(div);
+      transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    }
+
+    async function toggleCall() {
+      if (!recognition) return;
+
+      if (!isRecording) {
+        if (!localModel.isReady) { alert("모델 로딩 중..."); return; }
+
+        transcriptBox.innerHTML = '';
+        analysisLog.innerHTML = '';
+        addLog("🔵 통화 연결됨", "safe");
+
+        utterBuffer = "";
+        localModel.resetContext();
+        currentRiskScore = 0;
+        updateGaugeUI(0, 'safe');
+
+        currentSession = { id: Date.now(), startTime: new Date().toLocaleString(), duration: 0, isDanger: false, finalRisk: 0 };
+
+        try { recognition.start(); } catch {}
+        isRecording = true;
+        mainBtn.className = 'recording-mode';
+        statusText.innerText = "AI 감시 중";
+        statusText.style.color = "#64b5f6";
+        startWaveAnimation();
+        startTimer();
+      } else {
+        try { recognition.stop(); } catch {}
+        isRecording = false;
+        mainBtn.className = 'start-mode';
+        addLog("⏹️ 통화 종료", "send");
+
+        utterBuffer = "";
+
+        if (currentSession) {
+          currentSession.duration = seconds;
+          currentSession.finalRisk = currentRiskScore;
+          historyData.push(currentSession);
+          renderHistoryList();
+        }
+        stopWaveAnimation();
+        stopTimer();
+
+        statusText.innerText = "연결 대기 중";
+        statusText.style.color = "#aabec6";
+      }
+    }
+
+    function toggleSidebar() { sidebar.classList.toggle('open'); overlay.classList.toggle('show'); }
+    function renderHistoryList() {
+      historyList.innerHTML = '';
+      [...historyData].reverse().forEach(session => {
+        const li = document.createElement('li');
+        li.className = `history-item ${session.finalRisk >= 95 ? 'danger' : (session.finalRisk >= 80 ? 'warning' : 'safe')}`;
+        li.innerHTML = `<span class="h-time">${session.startTime}</span><span class="h-preview">최종: ${session.finalRisk}%</span>`;
+        historyList.appendChild(li);
+      });
+    }
+
+    window.startApp = startApp;
+    window.goBack = goBack;
+    window.toggleCall = toggleCall;
+    window.toggleSidebar = toggleSidebar;
+  </script>
 </body>
 </html>
